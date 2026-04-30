@@ -1,4 +1,6 @@
 import os
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +10,8 @@ from sqlalchemy import text
 
 from app.db.session import engine, AsyncSessionLocal
 from app.db.base import Base
+
+logger = logging.getLogger(__name__)
 
 # Importar todos los modelos para que SQLAlchemy los registre antes de create_all
 import app.acceso_registro.models    # noqa: F401  (User, Vehiculo, Taller, PasswordResetCode)
@@ -35,25 +39,30 @@ async def lifespan(app: FastAPI):
     os.makedirs("uploads/fotos", exist_ok=True)
     os.makedirs("uploads/audio", exist_ok=True)
 
-    # Crear / migrar tablas
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-        # Columnas deferred de Tecnico (añadidas después del create_all inicial)
-        await conn.execute(text(
-            "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS latitud DOUBLE PRECISION"
-        ))
-        await conn.execute(text(
-            "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS longitud DOUBLE PRECISION"
-        ))
-        await conn.execute(text(
-            "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ultima_actualizacion TIMESTAMP WITH TIME ZONE"
-        ))
-
-        # §4.5 – Columna tipo_incidente en incidentes (clasificación IA)
-        await conn.execute(text(
-            "ALTER TABLE incidentes ADD COLUMN IF NOT EXISTS tipo_incidente VARCHAR(50)"
-        ))
+    # Retry en conexión inicial — Railway puede tardar unos segundos en tener la DB lista
+    for attempt in range(10):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+                await conn.execute(text(
+                    "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS latitud DOUBLE PRECISION"
+                ))
+                await conn.execute(text(
+                    "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS longitud DOUBLE PRECISION"
+                ))
+                await conn.execute(text(
+                    "ALTER TABLE tecnicos ADD COLUMN IF NOT EXISTS ultima_actualizacion TIMESTAMP WITH TIME ZONE"
+                ))
+                await conn.execute(text(
+                    "ALTER TABLE incidentes ADD COLUMN IF NOT EXISTS tipo_incidente VARCHAR(50)"
+                ))
+            break
+        except Exception as exc:
+            if attempt == 9:
+                raise
+            wait = 2 ** attempt  # 1, 2, 4, 8, 16, 32 … segundos
+            logger.warning("DB no disponible (intento %d/10): %s — reintentando en %ds", attempt + 1, exc, wait)
+            await asyncio.sleep(wait)
 
     # Pool warm-up
     async with AsyncSessionLocal() as session:

@@ -3,5 +3,5 @@ builder = "dockerfile"
 
 [deploy]
 healthcheckPath = "/"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
