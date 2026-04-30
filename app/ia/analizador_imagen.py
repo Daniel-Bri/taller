@@ -111,20 +111,23 @@ def _clasificar(feat: dict) -> tuple[str, str, float]:
         cat, conf = "llanta_dano", 0.70
 
     # ── 2. MOTOR / HUMO ─────────────────────────────────────────────────────
-    # Compartimento motor: oscuro con varianza moderada (piezas metálicas), sin rojo.
-    elif es_llanta and r >= 1.50:       # llanta descartada por rojo → es humo/llamas
-        cat, conf = "motor_humo", 0.62
-    elif r > 1.50 and s > 0.35:        # llamas / naranja intenso
+    # Tres patrones:
+    #   a) Llamas/naranja intenso
+    #   b) Capot abierto bien iluminado: complejidad mecánica (bordes altos) + baja
+    #      saturación (metales/plásticos industriales sin pintura de carrocería)
+    #   c) Compartimiento oscuro clásico con varianza moderada
+    elif r > 1.50 and s > 0.35:
         cat, conf = "motor_humo", 0.61
-    elif b < 0.38 and d > 0.20 and v > 0.07 and r < 1.15:
-        cat, conf = "motor_humo", 0.67
-    elif b < 0.30 and d > 0.16:
+    elif es_llanta and r >= 1.50:
         cat, conf = "motor_humo", 0.62
+    elif (e > 0.12 and s < 0.28 and d > 0.08 and b < 0.60 and r < 1.30) or \
+         (b < 0.42 and d > 0.18 and v > 0.07 and r < 1.25) or \
+         (b < 0.32 and d > 0.12):
+        cat, conf = "motor_humo", 0.66
 
     # ── 3. VIDRIO ROTO ──────────────────────────────────────────────────────
-    # Patrón de fractura: densidad de bordes MUY alta en zona clara/brillante.
-    # Umbrales más estrictos para no absorber contornos de llanta o carrocería.
-    elif e > 0.20 and b > 0.55 and v > 0.18 and d < 0.25:
+    # Patrón de fractura: bordes muy densos en zona clara/brillante sin oscuridad.
+    elif e > 0.20 and b > 0.55 and v > 0.18 and d < 0.20:
         cat, conf = "vidrio_roto", 0.62
 
     # ── 4. DAÑO EN CARROCERÍA / MÚLTIPLE ────────────────────────────────────
