@@ -6,7 +6,7 @@ import asyncio
 import json
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, text
+from sqlalchemy import select
 from dotenv import load_dotenv
 import os
 
@@ -59,29 +59,21 @@ USUARIOS = [
     {"email": "taller5@taller.com",  "username": "taller5",  "full_name": "Mecánica Cristo Rey",      "password": "12345678", "role": "taller"},
     {"email": "tecnico@taller.com",  "username": "tecnico",  "full_name": "Luis Vargas",              "password": "12345678", "role": "tecnico"},
     {"email": "tecnico2@taller.com", "username": "tecnico2", "full_name": "Pedro Huanca",             "password": "12345678", "role": "tecnico"},
+    {"email": "tecnico3@taller.com", "username": "tecnico3", "full_name": "Miguel Torrez",            "password": "12345678", "role": "tecnico"},
+    {"email": "tecnico4@taller.com", "username": "tecnico4", "full_name": "Sandra Rojas",             "password": "12345678", "role": "tecnico"},
 ]
 
 async def seed():
     async with engine.begin() as conn:
+        if SEED_RESET:
+            print("\n[RESET] SEED_RESET=true — eliminando y recreando schema...")
+            await conn.run_sync(Base.metadata.drop_all)
+            print("[RESET] Tablas eliminadas.")
+
         await conn.run_sync(Base.metadata.create_all)
 
         if SEED_RESET:
-            print("\n[RESET] SEED_RESET=true — borrando todos los datos existentes...")
-            # Truncar en orden inverso a las FK para evitar errores de referencia
-            tablas = [
-                "servicios_realizados", "cotizaciones", "mensajes",
-                "evidencias", "asignaciones", "tecnicos",
-                "incidentes", "vehiculos", "talleres",
-                "bitacora_eventos", "dispositivos_tokens",
-                "password_reset_codes", "users",
-            ]
-            for tabla in tablas:
-                try:
-                    await conn.execute(text(f"TRUNCATE TABLE {tabla} RESTART IDENTITY CASCADE"))
-                    print(f"  [ok]   {tabla} truncada")
-                except Exception as e:
-                    print(f"  [skip] {tabla}: {e}")
-            print("[RESET] Listo — insertando datos frescos...\n")
+            print("[RESET] Schema recreado — insertando datos frescos...\n")
 
     async with AsyncSessionLocal() as db:
 
@@ -221,28 +213,37 @@ async def seed():
         # ── 4. Técnicos ───────────────────────────────────────────────────────
         print("\n[4/7] Técnicos...")
         taller_aprobado = talleres["taller"]
-        TECNICOS = [
-            {"nombre": "Luis Vargas",    "especialidad": "Motor y transmisión",   "telefono": "71111111", "estado": "ocupado",     "usuario": "tecnico"},
-            {"nombre": "Pedro Huanca",   "especialidad": "Eléctrica automotriz",  "telefono": "72222222", "estado": "ocupado",     "usuario": "tecnico2"},
-            {"nombre": "Jorge Mamani",   "especialidad": "Frenos y suspensión",   "telefono": "73333333", "estado": "disponible",  "usuario": None},
-            {"nombre": "Rosa Chávez",    "especialidad": "Carrocería y pintura",  "telefono": "74444444", "estado": "disponible",  "usuario": None},
-            {"nombre": "Mario Quispe",   "especialidad": "Diagnóstico OBD",       "telefono": "75555555", "estado": "inactivo",    "usuario": None},
+        taller4         = talleres["taller4"]
+
+        # (taller_key, datos_técnico)
+        TECNICOS_DEF = [
+            # ── AutoFix Santa Cruz (taller principal) ─────────────────────────
+            ("taller", {"nombre": "Luis Vargas",    "especialidad": "Motor y transmisión",   "telefono": "71111111", "estado": "ocupado",    "usuario": "tecnico"}),
+            ("taller", {"nombre": "Pedro Huanca",   "especialidad": "Eléctrica automotriz",  "telefono": "72222222", "estado": "ocupado",    "usuario": "tecnico2"}),
+            ("taller", {"nombre": "Jorge Mamani",   "especialidad": "Frenos y suspensión",   "telefono": "73333333", "estado": "disponible", "usuario": None}),
+            ("taller", {"nombre": "Rosa Chávez",    "especialidad": "Carrocería y pintura",  "telefono": "74444444", "estado": "disponible", "usuario": None}),
+            ("taller", {"nombre": "Mario Quispe",   "especialidad": "Diagnóstico OBD",       "telefono": "75555555", "estado": "inactivo",   "usuario": None}),
+            # ── Servicio Automotriz Plan 3000 (taller4) ───────────────────────
+            ("taller4", {"nombre": "Miguel Torrez", "especialidad": "Motor y suspensión",    "telefono": "76666666", "estado": "disponible", "usuario": "tecnico3"}),
+            ("taller4", {"nombre": "Sandra Rojas",  "especialidad": "Eléctrica y diagnóstico","telefono": "77777777", "estado": "disponible", "usuario": "tecnico4"}),
+            ("taller4", {"nombre": "Carlos Flores", "especialidad": "Carrocería y pintura",  "telefono": "78888888", "estado": "disponible", "usuario": None}),
         ]
         tecnicos: list[Tecnico] = []
-        for i, t in enumerate(TECNICOS):
+        for taller_key, t in TECNICOS_DEF:
+            taller_obj = talleres[taller_key]
             result = await db.execute(
                 select(Tecnico).where(
-                    Tecnico.taller_id == taller_aprobado.id,
+                    Tecnico.taller_id == taller_obj.id,
                     Tecnico.nombre == t["nombre"],
                 )
             )
             tec = result.scalar_one_or_none()
             if tec:
-                print(f"  [skip] {t['nombre']}")
+                print(f"  [skip] {t['nombre']} ({taller_key})")
             else:
                 usuario_id = users[t["usuario"]].id if t["usuario"] else None
                 tec = Tecnico(
-                    taller_id=taller_aprobado.id,
+                    taller_id=taller_obj.id,
                     usuario_id=usuario_id,
                     nombre=t["nombre"],
                     especialidad=t["especialidad"],
@@ -252,7 +253,7 @@ async def seed():
                 )
                 db.add(tec)
                 await db.flush()
-                print(f"  [ok]   {t['nombre']} ({t['estado']})")
+                print(f"  [ok]   {t['nombre']} ({t['estado']}) → {taller_key}")
             tecnicos.append(tec)
         await db.commit()
         for tec in tecnicos:
@@ -490,12 +491,14 @@ async def seed():
 ║  taller3@taller.com  → Taller Norte SC           (aprobado)    ║
 ║  taller4@taller.com  → Servicio Automotriz Plan  (aprobado)    ║
 ║  taller5@taller.com  → Mecánica Cristo Rey       (pendiente)   ║
-║  tecnico@taller.com  → tecnico (Luis Vargas)                    ║
-║  tecnico2@taller.com → tecnico (Pedro Huanca)                   ║
+║  tecnico@taller.com  → Luis Vargas   (AutoFix)                  ║
+║  tecnico2@taller.com → Pedro Huanca  (AutoFix)                  ║
+║  tecnico3@taller.com → Miguel Torrez (Plan 3000)                ║
+║  tecnico4@taller.com → Sandra Rojas  (Plan 3000)                ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  DATOS CREADOS — todos los talleres en Santa Cruz de la Sierra  ║
-║  4 Vehículos  │  5 Técnicos  │  8 Incidentes                   ║
-║  8 Asignaciones:                                                ║
+║  4 Vehículos  │  8 Técnicos (5 AutoFix + 3 Plan3000)           ║
+║  8 Incidentes │  8 Asignaciones:                                ║
 ║    • 2 finalizadas  (historial CU22)                            ║
 ║    • 2 en_reparacion (listas para CU22)                         ║
 ║    • 1 en_camino    (activa CU15)                               ║

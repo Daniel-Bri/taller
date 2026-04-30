@@ -21,36 +21,55 @@ _SEVERIDAD_ES = {"leve": "Leve", "moderado": "Moderado", "grave": "Grave"}
 
 
 def _extraer_features(img) -> dict:
-    """Extrae estadísticas de imagen usando PIL y numpy."""
+    """Extrae estadísticas globales y zonales de imagen usando PIL y numpy."""
     from PIL import ImageFilter
     img_rgb = img.convert("RGB").resize((224, 224), resample=1)  # LANCZOS
     arr = np.array(img_rgb, dtype=np.float32)
     r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
 
-    brightness  = float(np.mean(arr)) / 255.0
-    variance    = float(np.std(arr))  / 255.0
-    red_ratio   = float(np.mean(r)) / (float(np.mean(g) + np.mean(b)) / 2.0 + 1e-6)
+    # ── Estadísticas globales ────────────────────────────────────────────────
+    brightness   = float(np.mean(arr)) / 255.0
+    variance     = float(np.std(arr))  / 255.0
+    red_ratio    = float(np.mean(r)) / (float(np.mean(g) + np.mean(b)) / 2.0 + 1e-6)
 
-    # Saturación HSV aproximada: (max - min) / max
     max_ch = np.maximum(np.maximum(r, g), b)
     min_ch = np.minimum(np.minimum(r, g), b)
-    saturation  = float(np.mean((max_ch - min_ch) / (max_ch + 1e-6)))
+    saturation   = float(np.mean((max_ch - min_ch) / (max_ch + 1e-6)))
+    dark_ratio   = float(np.mean(arr < 50))
 
-    dark_ratio = float(np.mean(arr < 50))
-
-    # Densidad de bordes mediante filtro Laplaciano de PIL
     gray   = img_rgb.convert("L")
     edges  = gray.filter(ImageFilter.FIND_EDGES)
     e_arr  = np.array(edges, dtype=np.float32)
     edge_density = float(np.mean(e_arr)) / 255.0
 
+    # ── Análisis por zonas ───────────────────────────────────────────────────
+    # Las llantas suelen aparecer en la mitad inferior de la foto;
+    # el compartimento del motor suele ocupar el centro/superior.
+    h = arr.shape[0]
+    mid = h // 2
+    bot = arr[mid:, :, :]
+    top = arr[:mid,  :, :]
+
+    bottom_dark  = float(np.mean(bot < 50))   # fracción muy oscura mitad inferior
+    top_dark     = float(np.mean(top < 50))   # fracción muy oscura mitad superior
+    bottom_sat   = float(np.mean(                           # saturación mitad inferior
+        (np.maximum(np.maximum(bot[:,:,0], bot[:,:,1]), bot[:,:,2]) -
+         np.minimum(np.minimum(bot[:,:,0], bot[:,:,1]), bot[:,:,2])) /
+        (np.maximum(np.maximum(bot[:,:,0], bot[:,:,1]), bot[:,:,2]) + 1e-6)
+    ))
+    dark_var     = float(np.std(bot[bot < 80])) / 255.0 if np.any(bot < 80) else 0.0
+
     return {
-        "brightness":   brightness,
-        "variance":     variance,
-        "red_ratio":    red_ratio,
-        "saturation":   saturation,
-        "dark_ratio":   dark_ratio,
-        "edge_density": edge_density,
+        "brightness":    brightness,
+        "variance":      variance,
+        "red_ratio":     red_ratio,
+        "saturation":    saturation,
+        "dark_ratio":    dark_ratio,
+        "edge_density":  edge_density,
+        "bottom_dark":   bottom_dark,
+        "top_dark":      top_dark,
+        "bottom_sat":    bottom_sat,
+        "dark_var":      dark_var,
     }
 
 
@@ -61,44 +80,51 @@ def _clasificar(feat: dict) -> tuple[str, str, float]:
     El orden importa: las condiciones más específicas van primero para
     evitar que cualquier foto nítida caiga en 'dano_carroceria'.
     """
-    b = feat["brightness"]
-    v = feat["variance"]
-    r = feat["red_ratio"]
-    d = feat["dark_ratio"]
-    e = feat["edge_density"]
-    s = feat["saturation"]
+    b  = feat["brightness"]
+    v  = feat["variance"]
+    r  = feat["red_ratio"]
+    d  = feat["dark_ratio"]
+    e  = feat["edge_density"]
+    s  = feat["saturation"]
+    bd = feat.get("bottom_dark", d)   # fracción oscura mitad inferior
+    bs = feat.get("bottom_sat",  s)   # saturación mitad inferior
 
     # ── 1. LLANTA PONCHADA ───────────────────────────────────────────────────
-    # Caucho negro: imagen mayoritariamente oscura, baja saturación, baja varianza.
-    # Las fotos de llantas tienen mucho negro uniforme (d alto) y poca variedad de color.
-    if d > 0.40 and s < 0.25 and v < 0.22:
-        cat, conf = "llanta_dano", 0.72
-    elif d > 0.50 and v < 0.28:            # llanta vista de cerca, muy oscuro
-        cat, conf = "llanta_dano", 0.65
-    elif v < 0.08 and b < 0.35:            # superficie muy uniforme y oscura
-        cat, conf = "llanta_dano", 0.60
+    # Caucho negro: zona inferior muy oscura y poco saturada (llanta en la parte baja),
+    # O imagen globalmente oscura con poca varianza de color.
+    # Se usan OR amplios para capturar fotos de ángulos y distancias variadas.
+    if (bd > 0.28 and bs < 0.45 and d > 0.18) or \
+       (d > 0.35 and v < 0.30 and s < 0.35) or \
+       (d > 0.50 and v < 0.32) or \
+       (v < 0.09 and b < 0.42 and s < 0.30):
+        # Descartar si hay mucho rojo/naranja (sería motor/fuego)
+        if r < 1.50:
+            cat, conf = "llanta_dano", 0.70
+
+        else:
+            cat, conf = "motor_humo", 0.62
 
     # ── 2. MOTOR / HUMO ─────────────────────────────────────────────────────
     # Compartimento motor: oscuro pero con varianza moderada (partes metálicas,
     # cables, etc.). Baja saturación (metales grises/negros). Sin rojo dominante.
-    elif b < 0.35 and d > 0.22 and v > 0.08 and r < 1.10:
+    elif b < 0.38 and d > 0.20 and v > 0.07 and r < 1.15:
         cat, conf = "motor_humo", 0.67
-    elif b < 0.28 and d > 0.18:            # muy oscuro general
+    elif b < 0.30 and d > 0.16:
         cat, conf = "motor_humo", 0.62
-    elif r > 1.55 and s > 0.38:            # llamas / naranja intenso
+    elif r > 1.50 and s > 0.35:            # llamas / naranja intenso
         cat, conf = "motor_humo", 0.61
 
     # ── 3. VIDRIO ROTO ──────────────────────────────────────────────────────
     # Patrón de fractura: muchos bordes en zona clara/brillante.
-    elif e > 0.15 and b > 0.50 and v > 0.15:
+    elif e > 0.14 and b > 0.48 and v > 0.14:
         cat, conf = "vidrio_roto", 0.60
 
     # ── 4. DAÑO EN CARROCERÍA / MÚLTIPLE ────────────────────────────────────
     # Solo se activa con umbrales altos para no absorber fotos genéricas.
-    elif e > 0.18 and v > 0.28:
-        if d > 0.22 or (e > 0.20 and v > 0.32):
+    elif e > 0.17 and v > 0.26:
+        if d > 0.20 or (e > 0.19 and v > 0.30):
             cat, conf = "multiple_dano", 0.66
-        elif r > 1.25:
+        elif r > 1.20:
             cat, conf = "dano_carroceria", 0.68
         else:
             cat, conf = "dano_carroceria", 0.62
