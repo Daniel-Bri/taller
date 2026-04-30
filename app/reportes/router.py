@@ -65,7 +65,6 @@ async def historial(
     from app.talleres_tecnicos.models import ServicioRealizado, Asignacion
     from app.cotizacion_pagos.models import Cotizacion
     from app.emergencias.models import Incidente
-    from sqlalchemy.orm import undefer as _undefer
 
     if current_user.role in ("taller", "tecnico"):
         from app.talleres_tecnicos.service import listar_servicios_realizados
@@ -97,7 +96,6 @@ async def historial(
     # Info de incidentes (batch)
     inc_res = await db.execute(
         select(Incidente.id, Incidente.descripcion, Incidente.tipo_incidente)
-        .options(_undefer(Incidente.tipo_incidente))
         .where(Incidente.id.in_(inc_ids))
     )
     inc_data: dict[int, dict] = {

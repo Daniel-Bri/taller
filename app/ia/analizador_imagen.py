@@ -120,7 +120,8 @@ def _clasificar(feat: dict) -> tuple[str, str, float]:
         cat, conf = "motor_humo", 0.61
     elif es_llanta and r >= 1.50:
         cat, conf = "motor_humo", 0.62
-    elif (e > 0.12 and s < 0.28 and d > 0.08 and b < 0.60 and r < 1.30) or \
+    elif (b > 0.45 and s < 0.20 and e < 0.12 and v > 0.04 and r < 1.30) or \
+         (e > 0.12 and s < 0.28 and d > 0.08 and b < 0.60 and r < 1.30) or \
          (b < 0.42 and d > 0.18 and v > 0.07 and r < 1.25) or \
          (b < 0.32 and d > 0.12):
         cat, conf = "motor_humo", 0.66
