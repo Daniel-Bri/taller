@@ -6,7 +6,7 @@ import asyncio
 import json
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
+from sqlalchemy import select, text
 from dotenv import load_dotenv
 import os
 
@@ -45,6 +45,8 @@ if _use_ssl:
 engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+SEED_RESET = os.getenv("SEED_RESET", "false").lower() in ("true", "1", "yes")
+
 # ── Usuarios ─────────────────────────────────────────────────────────────────
 USUARIOS = [
     {"email": "admin@taller.com",    "username": "admin",    "full_name": "Administrador",            "password": "12345678", "role": "admin"},
@@ -62,6 +64,24 @@ USUARIOS = [
 async def seed():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        if SEED_RESET:
+            print("\n[RESET] SEED_RESET=true — borrando todos los datos existentes...")
+            # Truncar en orden inverso a las FK para evitar errores de referencia
+            tablas = [
+                "servicios_realizados", "cotizaciones", "mensajes",
+                "evidencias", "asignaciones", "tecnicos",
+                "incidentes", "vehiculos", "talleres",
+                "bitacora_eventos", "dispositivos_tokens",
+                "password_reset_codes", "users",
+            ]
+            for tabla in tablas:
+                try:
+                    await conn.execute(text(f"TRUNCATE TABLE {tabla} RESTART IDENTITY CASCADE"))
+                    print(f"  [ok]   {tabla} truncada")
+                except Exception as e:
+                    print(f"  [skip] {tabla}: {e}")
+            print("[RESET] Listo — insertando datos frescos...\n")
 
     async with AsyncSessionLocal() as db:
 
