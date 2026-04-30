@@ -23,12 +23,26 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 if not DATABASE_URL:
     print("[seed] DATABASE_URL no configurada — omitiendo seed.")
     raise SystemExit(0)
+
+_use_ssl = "sslmode=require" in DATABASE_URL or "sslmode=verify-full" in DATABASE_URL
+
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"timeout": 5})
+# asyncpg no entiende sslmode en la URL — quitar del query string
+if "sslmode=" in DATABASE_URL:
+    from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+    _parsed = urlparse(DATABASE_URL)
+    _params = {k: v[0] for k, v in parse_qs(_parsed.query).items() if k != "sslmode"}
+    DATABASE_URL = urlunparse(_parsed._replace(query=urlencode(_params)))
+
+_connect_args: dict = {"timeout": 5}
+if _use_ssl:
+    _connect_args["ssl"] = "require"
+
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # ── Usuarios ─────────────────────────────────────────────────────────────────

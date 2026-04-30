@@ -23,7 +23,18 @@ class Settings(BaseSettings):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg NO entiende sslmode en la URL — se maneja via connect_args en session.py
+        if "sslmode=" in url:
+            from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+            parsed = urlparse(url)
+            params = {k: v[0] for k, v in parse_qs(parsed.query).items() if k != "sslmode"}
+            url = urlunparse(parsed._replace(query=urlencode(params)))
         return url
+
+    @property
+    def db_ssl(self) -> bool:
+        """True si la DB remota requiere SSL (Railway, Heroku, Supabase, etc.)."""
+        return "sslmode=require" in self.DATABASE_URL or "sslmode=verify-full" in self.DATABASE_URL
 
     class Config:
         env_file = ".env"
