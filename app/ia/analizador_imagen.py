@@ -86,41 +86,48 @@ def _clasificar(feat: dict) -> tuple[str, str, float]:
     d  = feat["dark_ratio"]
     e  = feat["edge_density"]
     s  = feat["saturation"]
-    bd = feat.get("bottom_dark", d)   # fracción oscura mitad inferior
-    bs = feat.get("bottom_sat",  s)   # saturación mitad inferior
+    bd = feat.get("bottom_dark", d)    # fracción oscura mitad inferior
+    td = feat.get("top_dark",    d)    # fracción oscura mitad superior
+    bs = feat.get("bottom_sat",  s)    # saturación mitad inferior
+
+    # Cuánto más oscura es la mitad inferior respecto a la superior.
+    # Un valor alto (> 0.08) indica objeto oscuro en la parte baja → llanta en el suelo.
+    bottom_dominates = (bd - td) > 0.08
 
     # ── 1. LLANTA PONCHADA ───────────────────────────────────────────────────
-    # Caucho negro: zona inferior muy oscura y poco saturada (llanta en la parte baja),
-    # O imagen globalmente oscura con poca varianza de color.
-    # Se usan OR amplios para capturar fotos de ángulos y distancias variadas.
-    if (bd > 0.28 and bs < 0.45 and d > 0.18) or \
-       (d > 0.35 and v < 0.30 and s < 0.35) or \
-       (d > 0.50 and v < 0.32) or \
-       (v < 0.09 and b < 0.42 and s < 0.30):
-        # Descartar si hay mucho rojo/naranja (sería motor/fuego)
-        if r < 1.50:
-            cat, conf = "llanta_dano", 0.70
-
-        else:
-            cat, conf = "motor_humo", 0.62
+    # Patrones aceptados (OR):
+    #   a) Zona inferior claramente más oscura (llanta en el suelo, fondo claro)
+    #   b) Imagen globalmente oscura y poco saturada (foto de cerca del caucho)
+    #   c) Muy oscura en general sin importar la saturación
+    #   d) Superficie uniforme y oscura (llanta de perfil, sin fondo)
+    es_llanta = (
+        (bd > 0.25 and bs < 0.55 and bottom_dominates) or
+        (bd > 0.32 and bs < 0.45 and d > 0.15) or
+        (d > 0.35 and v < 0.30 and s < 0.38) or
+        (d > 0.50 and v < 0.32) or
+        (v < 0.10 and b < 0.45 and s < 0.32)
+    )
+    if es_llanta and r < 1.50:          # descartar si hay rojo/naranja intenso (fuego)
+        cat, conf = "llanta_dano", 0.70
 
     # ── 2. MOTOR / HUMO ─────────────────────────────────────────────────────
-    # Compartimento motor: oscuro pero con varianza moderada (partes metálicas,
-    # cables, etc.). Baja saturación (metales grises/negros). Sin rojo dominante.
+    # Compartimento motor: oscuro con varianza moderada (piezas metálicas), sin rojo.
+    elif es_llanta and r >= 1.50:       # llanta descartada por rojo → es humo/llamas
+        cat, conf = "motor_humo", 0.62
+    elif r > 1.50 and s > 0.35:        # llamas / naranja intenso
+        cat, conf = "motor_humo", 0.61
     elif b < 0.38 and d > 0.20 and v > 0.07 and r < 1.15:
         cat, conf = "motor_humo", 0.67
     elif b < 0.30 and d > 0.16:
         cat, conf = "motor_humo", 0.62
-    elif r > 1.50 and s > 0.35:            # llamas / naranja intenso
-        cat, conf = "motor_humo", 0.61
 
     # ── 3. VIDRIO ROTO ──────────────────────────────────────────────────────
-    # Patrón de fractura: muchos bordes en zona clara/brillante.
-    elif e > 0.14 and b > 0.48 and v > 0.14:
-        cat, conf = "vidrio_roto", 0.60
+    # Patrón de fractura: densidad de bordes MUY alta en zona clara/brillante.
+    # Umbrales más estrictos para no absorber contornos de llanta o carrocería.
+    elif e > 0.20 and b > 0.55 and v > 0.18 and d < 0.25:
+        cat, conf = "vidrio_roto", 0.62
 
     # ── 4. DAÑO EN CARROCERÍA / MÚLTIPLE ────────────────────────────────────
-    # Solo se activa con umbrales altos para no absorber fotos genéricas.
     elif e > 0.17 and v > 0.26:
         if d > 0.20 or (e > 0.19 and v > 0.30):
             cat, conf = "multiple_dano", 0.66

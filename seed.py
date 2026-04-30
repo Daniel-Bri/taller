@@ -6,7 +6,7 @@ import asyncio
 import json
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
+from sqlalchemy import select, text
 from dotenv import load_dotenv
 import os
 
@@ -46,6 +46,7 @@ engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_arg
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 SEED_RESET = os.getenv("SEED_RESET", "false").lower() in ("true", "1", "yes")
+print(f"[seed] SEED_RESET={SEED_RESET}  (env raw: {os.getenv('SEED_RESET', '<no definido>')})")
 
 # ── Usuarios ─────────────────────────────────────────────────────────────────
 USUARIOS = [
@@ -64,16 +65,16 @@ USUARIOS = [
 ]
 
 async def seed():
+    if SEED_RESET:
+        print("\n[RESET] SEED_RESET=true — ejecutando DROP SCHEMA public CASCADE...")
+        async with engine.begin() as conn:
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+            await conn.execute(text("GRANT ALL ON SCHEMA public TO PUBLIC"))
+        print("[RESET] Schema recreado limpio.\n")
+
     async with engine.begin() as conn:
-        if SEED_RESET:
-            print("\n[RESET] SEED_RESET=true — eliminando y recreando schema...")
-            await conn.run_sync(Base.metadata.drop_all)
-            print("[RESET] Tablas eliminadas.")
-
         await conn.run_sync(Base.metadata.create_all)
-
-        if SEED_RESET:
-            print("[RESET] Schema recreado — insertando datos frescos...\n")
 
     async with AsyncSessionLocal() as db:
 

@@ -22,6 +22,17 @@ router = APIRouter()
 
 _ESTADOS_CERRADOS = ["cancelado", "finalizado"]
 
+_TIPO_LABELS: dict[str, str] = {
+    "accidente":         "Accidente de tránsito",
+    "llanta_ponchada":   "Llanta ponchada",
+    "sobrecalentamiento":"Sobrecalentamiento del motor",
+    "falla_electrica":   "Falla eléctrica",
+    "falla_mecanica":    "Falla mecánica",
+    "fuga_combustible":  "Fuga de combustible",
+    "colision":          "Colisión",
+    "otros":             "Otros",
+}
+
 
 class SolicitudDisponibleResponse(BaseModel):
     incidente_id: int
@@ -121,7 +132,7 @@ async def disponibles(
         eta_estimado_min = None
         if distancia is not None:
             eta_estimado_min = max(5, math.ceil(distancia / 30 * 60))  # 30 km/h urbano, mínimo 5 min
-        tipo_problema = i.tipo_incidente or ""
+        tipo_problema = _TIPO_LABELS.get(i.tipo_incidente or "", i.tipo_incidente or "")
         if not tipo_problema and i.descripcion:
             tipo_problema = clasificador.clasificar(i.descripcion).get("etiqueta_es", "")
 
