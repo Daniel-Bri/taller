@@ -47,13 +47,16 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 
 # ── Usuarios ─────────────────────────────────────────────────────────────────
 USUARIOS = [
-    {"email": "admin@taller.com",    "username": "admin",    "full_name": "Administrador",     "password": "12345678", "role": "admin"},
-    {"email": "cliente@taller.com",  "username": "cliente",  "full_name": "Carlos Mendoza",    "password": "12345678", "role": "cliente"},
-    {"email": "cliente2@taller.com", "username": "cliente2", "full_name": "Ana Quispe",        "password": "12345678", "role": "cliente"},
-    {"email": "taller@taller.com",   "username": "taller",   "full_name": "AutoFix Express",   "password": "12345678", "role": "taller"},
-    {"email": "taller2@taller.com",  "username": "taller2",  "full_name": "Mecánica Central",  "password": "12345678", "role": "taller"},
-    {"email": "tecnico@taller.com",  "username": "tecnico",  "full_name": "Luis Vargas",       "password": "12345678", "role": "tecnico"},
-    {"email": "tecnico2@taller.com", "username": "tecnico2", "full_name": "Pedro Huanca",      "password": "12345678", "role": "tecnico"},
+    {"email": "admin@taller.com",    "username": "admin",    "full_name": "Administrador",            "password": "12345678", "role": "admin"},
+    {"email": "cliente@taller.com",  "username": "cliente",  "full_name": "Carlos Mendoza",           "password": "12345678", "role": "cliente"},
+    {"email": "cliente2@taller.com", "username": "cliente2", "full_name": "Ana Quispe",               "password": "12345678", "role": "cliente"},
+    {"email": "taller@taller.com",   "username": "taller",   "full_name": "AutoFix Santa Cruz",       "password": "12345678", "role": "taller"},
+    {"email": "taller2@taller.com",  "username": "taller2",  "full_name": "Mecánica Equipetrol",      "password": "12345678", "role": "taller"},
+    {"email": "taller3@taller.com",  "username": "taller3",  "full_name": "Taller Norte SC",          "password": "12345678", "role": "taller"},
+    {"email": "taller4@taller.com",  "username": "taller4",  "full_name": "Servicio Automotriz Plan", "password": "12345678", "role": "taller"},
+    {"email": "taller5@taller.com",  "username": "taller5",  "full_name": "Mecánica Cristo Rey",      "password": "12345678", "role": "taller"},
+    {"email": "tecnico@taller.com",  "username": "tecnico",  "full_name": "Luis Vargas",              "password": "12345678", "role": "tecnico"},
+    {"email": "tecnico2@taller.com", "username": "tecnico2", "full_name": "Pedro Huanca",             "password": "12345678", "role": "tecnico"},
 ]
 
 async def seed():
@@ -124,20 +127,47 @@ async def seed():
         TALLERES = [
             {
                 "usuario": "taller",
-                "nombre": "AutoFix Express",
-                "direccion": "Av. Américas 1245, La Paz",
+                "nombre": "AutoFix Santa Cruz",
+                "direccion": "Av. Cristo Redentor 1245, Santa Cruz de la Sierra",
                 "telefono": "78901234",
                 "email_comercial": "autofix@taller.com",
-                "latitud": -16.5000, "longitud": -68.1500,
+                "latitud": -17.7742, "longitud": -63.1953,
                 "estado": "aprobado", "disponible": True, "rating": 4.5,
             },
             {
                 "usuario": "taller2",
-                "nombre": "Mecánica Central",
-                "direccion": "Calle Comercio 890, Cochabamba",
+                "nombre": "Mecánica Equipetrol",
+                "direccion": "Av. San Martín 320, Equipetrol Norte, Santa Cruz",
                 "telefono": "71234567",
-                "email_comercial": "mecanica@taller.com",
-                "latitud": -17.3895, "longitud": -66.1568,
+                "email_comercial": "equipetrol@taller.com",
+                "latitud": -17.7697, "longitud": -63.1942,
+                "estado": "aprobado", "disponible": True, "rating": 4.2,
+            },
+            {
+                "usuario": "taller3",
+                "nombre": "Taller Norte SC",
+                "direccion": "Radial 27, 4to Anillo, Santa Cruz de la Sierra",
+                "telefono": "76543210",
+                "email_comercial": "nortesc@taller.com",
+                "latitud": -17.7520, "longitud": -63.2100,
+                "estado": "aprobado", "disponible": True, "rating": 3.8,
+            },
+            {
+                "usuario": "taller4",
+                "nombre": "Servicio Automotriz Plan 3000",
+                "direccion": "Av. Roca y Coronado, Plan 3000, Santa Cruz",
+                "telefono": "75556677",
+                "email_comercial": "plan3000@taller.com",
+                "latitud": -17.8305, "longitud": -63.1095,
+                "estado": "aprobado", "disponible": False, "rating": 3.5,
+            },
+            {
+                "usuario": "taller5",
+                "nombre": "Mecánica Cristo Rey",
+                "direccion": "Calle Beni 890, Barrio Cristo Rey, Santa Cruz",
+                "telefono": "79988776",
+                "email_comercial": "cristorey@taller.com",
+                "latitud": -17.7863, "longitud": -63.1812,
                 "estado": "pendiente", "disponible": False, "rating": 0.0,
             },
         ]
@@ -428,30 +458,33 @@ async def seed():
         await db.commit()
 
     print("""
-╔══════════════════════════════════════════════════════════════╗
-║                    SEED COMPLETADO                          ║
-╠══════════════════════════════════════════════════════════════╣
-║  CREDENCIALES (password: 12345678 para todos)               ║
-║  admin@taller.com    → admin                                ║
-║  cliente@taller.com  → cliente (Carlos Mendoza)             ║
-║  cliente2@taller.com → cliente (Ana Quispe)                 ║
-║  taller@taller.com   → taller  (AutoFix Express - aprobado) ║
-║  taller2@taller.com  → taller  (Mecánica Central - pend.)   ║
-║  tecnico@taller.com  → tecnico (Luis Vargas)                ║
-║  tecnico2@taller.com → tecnico (Pedro Huanca)               ║
-╠══════════════════════════════════════════════════════════════╣
-║  DATOS CREADOS                                              ║
-║  4 Vehículos  │  5 Técnicos  │  8 Incidentes               ║
-║  8 Asignaciones:                                            ║
-║    • 2 finalizadas  (historial CU22)                        ║
-║    • 2 en_reparacion (listas para CU22)                     ║
-║    • 1 en_camino    (activa CU15)                           ║
-║    • 1 en_sitio     (activa CU15)                           ║
-║    • 1 aceptada sin técnico (pendiente CU25)                ║
-║    • 1 aceptada sin técnico (para cotización CU20)          ║
-║  2 ServiciosRealizados (historial)                          ║
-║  3 Cotizaciones: 1 aceptada, 2 pendientes (CU20)            ║
-╚══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════╗
+║                      SEED COMPLETADO                            ║
+╠══════════════════════════════════════════════════════════════════╣
+║  CREDENCIALES (password: 12345678 para todos)                   ║
+║  admin@taller.com    → admin                                    ║
+║  cliente@taller.com  → cliente (Carlos Mendoza)                 ║
+║  cliente2@taller.com → cliente (Ana Quispe)                     ║
+║  taller@taller.com   → AutoFix Santa Cruz       (aprobado) ★   ║
+║  taller2@taller.com  → Mecánica Equipetrol       (aprobado)    ║
+║  taller3@taller.com  → Taller Norte SC           (aprobado)    ║
+║  taller4@taller.com  → Servicio Automotriz Plan  (aprobado)    ║
+║  taller5@taller.com  → Mecánica Cristo Rey       (pendiente)   ║
+║  tecnico@taller.com  → tecnico (Luis Vargas)                    ║
+║  tecnico2@taller.com → tecnico (Pedro Huanca)                   ║
+╠══════════════════════════════════════════════════════════════════╣
+║  DATOS CREADOS — todos los talleres en Santa Cruz de la Sierra  ║
+║  4 Vehículos  │  5 Técnicos  │  8 Incidentes                   ║
+║  8 Asignaciones:                                                ║
+║    • 2 finalizadas  (historial CU22)                            ║
+║    • 2 en_reparacion (listas para CU22)                         ║
+║    • 1 en_camino    (activa CU15)                               ║
+║    • 1 en_sitio     (activa CU15)                               ║
+║    • 1 aceptada sin técnico (pendiente CU25)                    ║
+║    • 1 aceptada sin técnico (para cotización CU20)              ║
+║  2 ServiciosRealizados (historial)                              ║
+║  3 Cotizaciones: 1 aceptada, 2 pendientes (CU20)               ║
+╚══════════════════════════════════════════════════════════════════╝
 """)
 
 
