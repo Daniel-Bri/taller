@@ -55,7 +55,12 @@ def _extraer_features(img) -> dict:
 
 
 def _clasificar(feat: dict) -> tuple[str, str, float]:
-    """Clasificación basada en reglas heurísticas + umbrales aprendidos."""
+    """Clasificación por reglas heurísticas sobre estadísticas de imagen.
+
+    Orden de prioridad: llanta → motor → vidrio → carrocería → sin daño.
+    El orden importa: las condiciones más específicas van primero para
+    evitar que cualquier foto nítida caiga en 'dano_carroceria'.
+    """
     b = feat["brightness"]
     v = feat["variance"]
     r = feat["red_ratio"]
@@ -63,33 +68,49 @@ def _clasificar(feat: dict) -> tuple[str, str, float]:
     e = feat["edge_density"]
     s = feat["saturation"]
 
-    # Alta densidad de bordes + alta varianza → daño estructural
-    if e > 0.13 and v > 0.22:
-        if d > 0.18:
-            cat, conf = "multiple_dano", 0.67
-        elif r > 1.30:
-            cat, conf = "dano_carroceria", 0.71
-        else:
-            cat, conf = "dano_carroceria", 0.65
-    # Imagen muy oscura + zonas negras grandes → humo o motor
-    elif b < 0.22 and d > 0.25:
-        cat, conf = "motor_humo", 0.64
-    # Alto rojo + saturación elevada → fuego / óxido / daño severo
-    elif r > 1.50 and s > 0.35:
-        cat, conf = "motor_humo", 0.59
-    # Bordes moderados + baja luminosidad → patrón de cristal roto
-    elif e > 0.09 and b < 0.45 and v > 0.14:
-        cat, conf = "vidrio_roto", 0.57
-    # Baja varianza, superficie uniforme oscura → neumático
-    elif v < 0.07 and b < 0.30:
-        cat, conf = "llanta_dano", 0.61
-    else:
-        cat, conf = "sin_dano_visible", 0.50
+    # ── 1. LLANTA PONCHADA ───────────────────────────────────────────────────
+    # Caucho negro: imagen mayoritariamente oscura, baja saturación, baja varianza.
+    # Las fotos de llantas tienen mucho negro uniforme (d alto) y poca variedad de color.
+    if d > 0.40 and s < 0.25 and v < 0.22:
+        cat, conf = "llanta_dano", 0.72
+    elif d > 0.50 and v < 0.28:            # llanta vista de cerca, muy oscuro
+        cat, conf = "llanta_dano", 0.65
+    elif v < 0.08 and b < 0.35:            # superficie muy uniforme y oscura
+        cat, conf = "llanta_dano", 0.60
 
-    # Severidad según extensión del daño
-    if d > 0.30 or (e > 0.16 and v > 0.28):
+    # ── 2. MOTOR / HUMO ─────────────────────────────────────────────────────
+    # Compartimento motor: oscuro pero con varianza moderada (partes metálicas,
+    # cables, etc.). Baja saturación (metales grises/negros). Sin rojo dominante.
+    elif b < 0.35 and d > 0.22 and v > 0.08 and r < 1.10:
+        cat, conf = "motor_humo", 0.67
+    elif b < 0.28 and d > 0.18:            # muy oscuro general
+        cat, conf = "motor_humo", 0.62
+    elif r > 1.55 and s > 0.38:            # llamas / naranja intenso
+        cat, conf = "motor_humo", 0.61
+
+    # ── 3. VIDRIO ROTO ──────────────────────────────────────────────────────
+    # Patrón de fractura: muchos bordes en zona clara/brillante.
+    elif e > 0.15 and b > 0.50 and v > 0.15:
+        cat, conf = "vidrio_roto", 0.60
+
+    # ── 4. DAÑO EN CARROCERÍA / MÚLTIPLE ────────────────────────────────────
+    # Solo se activa con umbrales altos para no absorber fotos genéricas.
+    elif e > 0.18 and v > 0.28:
+        if d > 0.22 or (e > 0.20 and v > 0.32):
+            cat, conf = "multiple_dano", 0.66
+        elif r > 1.25:
+            cat, conf = "dano_carroceria", 0.68
+        else:
+            cat, conf = "dano_carroceria", 0.62
+
+    # ── 5. SIN DAÑO IDENTIFICABLE ───────────────────────────────────────────
+    else:
+        cat, conf = "sin_dano_visible", 0.48
+
+    # ── Severidad ────────────────────────────────────────────────────────────
+    if d > 0.40 or (e > 0.18 and v > 0.30):
         sev = "grave"
-    elif d > 0.12 or e > 0.10:
+    elif d > 0.20 or e > 0.12:
         sev = "moderado"
     else:
         sev = "leve"
