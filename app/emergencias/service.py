@@ -17,6 +17,13 @@ from app.ia import clasificador
 logger = logging.getLogger(__name__)
 
 _UPLOAD_DIR = "uploads"
+_MAPEO_IMAGEN_A_TIPO = {
+    "motor_humo": "sobrecalentamiento",
+    "llanta_dano": "llanta_ponchada",
+    "dano_carroceria": "accidente",
+    "vidrio_roto": "accidente",
+    "multiple_dano": "accidente",
+}
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -151,7 +158,7 @@ async def guardar_foto(
     db: AsyncSession,
 ) -> dict:
     """Guarda la foto, ejecuta análisis IA (§4.4 + §4.5)."""
-    await _get_incidente_usuario(incidente_id, usuario_id, db)
+    incidente = await _get_incidente_usuario(incidente_id, usuario_id, db)
 
     from app.ia import analizador_imagen
 
@@ -167,6 +174,26 @@ async def guardar_foto(
         fh.write(imagen_bytes)
 
     analisis   = analizador_imagen.analizar(imagen_bytes)
+    categoria_img = str(analisis.get("categoria", "") or "")
+    confianza_img = float(analisis.get("confianza", 0.0) or 0.0)
+    tipo_por_imagen = _MAPEO_IMAGEN_A_TIPO.get(categoria_img)
+
+    # Fusiona texto+imagen: si la imagen es suficientemente confiable, actualiza tipo_incidente.
+    # Si ya existe tipo textual, la imagen solo lo pisa con confianza más alta.
+    if tipo_por_imagen:
+        try:
+            confianza_texto = 0.0
+            if incidente.descripcion and incidente.descripcion.strip():
+                res_texto = clasificador.clasificar(incidente.descripcion)
+                confianza_texto = float(res_texto.get("confianza", 0.0) or 0.0)
+
+            if not incidente.tipo_incidente:
+                if confianza_img >= 0.55:
+                    incidente.tipo_incidente = tipo_por_imagen
+            elif confianza_img >= max(0.65, confianza_texto + 0.10):
+                incidente.tipo_incidente = tipo_por_imagen
+        except Exception:
+            logger.exception("No se pudo fusionar clasificación texto+imagen para incidente %s", incidente_id)
     url_publica = f"/uploads/{ruta_rel}"
 
     evidencia = Evidencia(

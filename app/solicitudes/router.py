@@ -36,6 +36,7 @@ class SolicitudDisponibleResponse(BaseModel):
     created_at: str
     es_sos: bool = False
     distancia_km: Optional[float] = None
+    eta_estimado_min: Optional[int] = None
     score_ia: float = 0.0
 
 
@@ -117,6 +118,9 @@ async def disponibles(
             taller.latitud, taller.longitud, taller.rating or 0.0,
             taller.disponible, i.latitud, i.longitud, i.prioridad,
         )
+        eta_estimado_min = None
+        if distancia is not None:
+            eta_estimado_min = max(5, math.ceil(distancia / 30 * 60))  # 30 km/h urbano, mínimo 5 min
         tipo_problema = i.tipo_incidente or ""
         if not tipo_problema and i.descripcion:
             tipo_problema = clasificador.clasificar(i.descripcion).get("etiqueta_es", "")
@@ -138,6 +142,7 @@ async def disponibles(
                 and "SOS" in (i.descripcion or "")
             ),
             distancia_km=distancia,
+            eta_estimado_min=eta_estimado_min,
             score_ia=score,
         ))
 
